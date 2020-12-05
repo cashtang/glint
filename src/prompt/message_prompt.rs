@@ -1,10 +1,14 @@
+extern crate unicode_width;
 use crate::string::{self, next_word_grapheme, prev_word_grapheme, to_byte_offset, to_byte_range};
 use crate::Config;
 use crate::TermBuffer;
+
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     style::{style, Color},
 };
+
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 #[derive(Debug)]
 pub struct MessagePrompt<'a> {
@@ -76,7 +80,7 @@ impl<'a> MessagePrompt<'a> {
                     let (x, y) = self.cursor;
                     let line = self.input.get_mut(y as usize).unwrap();
                     line.insert(to_byte_offset(&line, x as usize), c);
-                    self.cursor.0 += 1;
+                    self.cursor.0 += UnicodeWidthChar::width(c).unwrap_or_default() as u16;
                 }
                 Some((KeyCode::Left, false, _, false)) => {
                     self.cursor.0 = self.cursor.0.saturating_sub(1);
@@ -119,7 +123,7 @@ impl<'a> MessagePrompt<'a> {
                         self.input.remove(y as usize);
                         self.cursor.1 -= 1;
                         let line = &self.input[self.cursor.1 as usize];
-                        self.cursor.0 = string::len(line) as u16;
+                        self.cursor.0 = UnicodeWidthStr::width(line as &str) as u16;
                     }
                     (x, y) => {
                         let line = self
@@ -130,7 +134,7 @@ impl<'a> MessagePrompt<'a> {
                         let start = to_byte_offset(line, prev_word_grapheme(line, x as usize));
                         line.replace_range(start..end, "");
 
-                        self.cursor.0 = string::len(&line[..start]) as u16;
+                        self.cursor.0 = UnicodeWidthStr::width(&line[..start]) as u16;
                     }
                 },
                 Some((KeyCode::Backspace, false, _, false)) => match self.cursor {
@@ -139,7 +143,7 @@ impl<'a> MessagePrompt<'a> {
                         self.input.remove(y as usize);
                         self.cursor.1 -= 1;
                         let line = &self.input[self.cursor.1 as usize];
-                        self.cursor.0 = string::len(line) as u16;
+                        self.cursor.0 = UnicodeWidthStr::width(line as &str) as u16;
                     }
                     (x, y) => {
                         let line = self
@@ -147,12 +151,12 @@ impl<'a> MessagePrompt<'a> {
                             .get_mut(y as usize)
                             .expect("Backspace (x, y) get line y");
 
-                        if x as usize >= string::len(line) {
+                        if x as usize >= UnicodeWidthStr::width(line as &str) {
                             line.pop();
                         } else {
                             line.replace_range(to_byte_range(line as &str, x as usize - 1), "");
                         }
-                        self.cursor.0 -= 1;
+                        self.cursor.0 = UnicodeWidthStr::width(line as &str) as u16;
                     }
                 },
                 Some((KeyCode::Char('d'), true, _, false)) => {
